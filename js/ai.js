@@ -144,8 +144,24 @@ function parseJSON(text) {
 }
 
 const MAX_ATTEMPTS = 4;
+const reasoningMode = new Map();
 
-async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
+function send(key, model, messages, temperature, maxTokens, mode) {
+  const body = { model, messages, temperature, max_tokens: maxTokens };
+  if (mode !== 'omit') body.reasoning = { effort: mode, exclude: true };
+  return fetch(`${BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': location.origin,
+      'X-Title': 'Planka',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function chat(messages, { temperature = 0, maxTokens = 6000 } = {}) {
   const s = await getSettings();
   if (!s.apiKey) throw new AIError('no_key');
   const tried = [];
@@ -168,20 +184,23 @@ async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
         model = 'openrouter/free';
       }
     }
+    // Бесплатные модели часто «думающие»: отключаем рассуждения, чтобы весь
+    // лимит ответа ушёл на сам ответ. Если модель так не умеет — пробуем мягче.
+    let mode = reasoningMode.get(model) || 'none';
     let r;
-    try {
-      r = await fetch(`${BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${s.apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': location.origin,
-          'X-Title': 'Planka',
-        },
-        body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
-      });
-    } catch {
-      throw new AIError('network');
+    let preread = null;
+    for (let k = 0; k < 3; k++) {
+      try {
+        r = await send(s.apiKey, model, messages, temperature, maxTokens, mode);
+      } catch {
+        throw new AIError('network');
+      }
+      if (r.status !== 400) break;
+      preread = await errorInfo(r);
+      if (!/reason|effort|think/i.test(preread) || mode === 'omit') break;
+      mode = mode === 'none' ? 'low' : 'omit';
+      reasoningMode.set(model, mode);
+      preread = null;
     }
     if (r.status === 401) throw new AIError('bad_key');
     if (r.status === 429) {
@@ -195,7 +214,7 @@ async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
       continue;
     }
     if (!r.ok) {
-      await skip(model, new AIError(r.status >= 500 ? 'server' : 'no_model', await errorInfo(r)));
+      await skip(model, new AIError(r.status >= 500 ? 'server' : 'no_model', preread ?? await errorInfo(r)));
       continue;
     }
     const j = await r.json();
@@ -205,9 +224,13 @@ async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
       await skip(model, new AIError(j.error.code === 429 ? 'busy' : 'server', msg), 500);
       continue;
     }
-    const content = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
-    if (!content) {
-      await skip(model, new AIError('server', 'пустой ответ модели'));
+    const choice = (j.choices && j.choices[0]) || {};
+    const message = choice.message || {};
+    let content = typeof message.content === 'string' ? message.content : '';
+    if (!content.trim() && typeof message.reasoning === 'string' && message.reasoning.includes('{')) content = message.reasoning;
+    if (!content.trim()) {
+      if (choice.finish_reason === 'length' && mode === 'none') reasoningMode.set(model, 'low');
+      await skip(model, new AIError('server', `пустой ответ: ${model}${choice.finish_reason ? `, ${choice.finish_reason}` : ''}`));
       continue;
     }
     try {
@@ -319,6 +342,6 @@ export async function importDoc({ text, title }) {
   const out = await chat([
     { role: 'system', content: system },
     { role: 'user', content: `Название проекта: ${title}\n\nДокумент:\n${text.slice(0, 15000)}` },
-  ], { maxTokens: 3500 });
+  ], { maxTokens: 8000 });
   return Array.isArray(out.blocks) ? out.blocks.slice(0, 24) : [];
 }

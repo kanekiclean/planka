@@ -5,6 +5,7 @@ import * as store from '../store.js';
 import { themeFromSettings } from '../themes.js';
 import { projectCover } from '../covers.js';
 import { openShare } from '../share.js';
+import { heroPhoto, shadeHero, openHeaderSheet } from '../header.js';
 
 export const tab = 'today';
 
@@ -24,7 +25,7 @@ export async function projectCardHtml(p, mini = false) {
 export default async function today(el) {
   const s = await store.getSettings();
   const theme = themeFromSettings(s);
-  const photo = theme.blobId ? await blobUrl(theme.blobId) : theme.photo;
+  const photo = await heroPhoto(s, theme);
   const now = new Date();
   const todayStr = todayYmd();
   const days = await store.allDays();
@@ -100,7 +101,7 @@ export default async function today(el) {
   el.innerHTML = `
     <div class="hero" style="--hero-h:390px;--overlap:150px">
       <img class="hero__img" src="${photo}" alt="" style="object-position:${theme.pos || '50% 50%'}">
-      <div class="hero__top">${logo()}<a class="icon-btn" href="#/settings" aria-label="Настройки">${icon('gear')}</a></div>
+      <div class="hero__top">${logo()}<div class="row" style="--gap:8px"><button class="icon-btn" data-act="header" aria-label="Сменить шапку">${icon('image')}</button><a class="icon-btn" href="#/settings" aria-label="Настройки">${icon('gear')}</a></div></div>
       <div class="hero__content">
         <p class="eyebrow">${fmtLong(todayStr)}</p>
         <h1 class="h1 hero__title">${hello}</h1>
@@ -125,4 +126,6 @@ export default async function today(el) {
     </div>`;
 
   on(el, 'click', '[data-act="share"]', () => openShare('day', { day, photo }));
+  on(el, 'click', '[data-act="header"]', () => openHeaderSheet(() => window.dispatchEvent(new HashChangeEvent('hashchange'))));
+  shadeHero(el.querySelector('.hero'), photo, theme, [0.15, 0.55]);
 }

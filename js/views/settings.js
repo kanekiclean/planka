@@ -3,7 +3,7 @@ import {
 } from '../ui.js';
 import * as store from '../store.js';
 import * as ai from '../ai.js';
-import { THEMES, applyTheme, themeFromSettings, paletteFromImage } from '../themes.js';
+import { THEMES, PHOTO_CREDITS, applyTheme, themeFromSettings, paletteFromImage } from '../themes.js';
 
 export const tab = null;
 
@@ -40,7 +40,7 @@ export default async function settings(el) {
 
         <section class="stack" style="--gap:14px" aria-labelledby="st-theme">
           <h2 class="h2" id="st-theme">Тема</h2>
-          <p class="small muted m0">Своё фото: приложение вытащит из него цвета и перекрасится.</p>
+          <p class="small muted m0">Своё фото: приложение вытащит из него цвета и перекрасится. Сменить только шапку можно кнопкой с картинкой на главном экране.</p>
           <div class="themes">${tiles}${custom}
             <button class="theme-tile theme-tile--add" data-act="custom">${icon('image', 22)}<span>${customUrl ? 'Другое фото' : 'Своё фото'}</span></button>
           </div>
@@ -73,7 +73,7 @@ export default async function settings(el) {
           <button class="btn btn--ghost btn--block" data-act="wipe">${icon('trash', 18)} Удалить все данные</button>
         </section>
 
-        <p class="tiny muted m0" style="text-align:center">Планка · версия 1.0</p>
+        <p class="tiny muted m0" style="text-align:center">Планка · версия 1.1 · ${PHOTO_CREDITS}</p>
       </div>`;
     el.querySelectorAll('textarea').forEach(autosize);
     if (s.apiKey && !s.modelOverride) {
@@ -94,18 +94,22 @@ export default async function settings(el) {
   on(el, 'click', '[data-act]', async (e, b) => {
     const act = b.dataset.act;
     if (act === 'theme') {
-      await store.saveSettings({ themeId: b.dataset.v });
+      const cur = await store.getSettings();
+      if (cur.header && cur.header.blobId) await store.deleteBlob(cur.header.blobId);
+      await store.saveSettings({ themeId: b.dataset.v, header: null });
       applyTheme(themeFromSettings(await store.getSettings()));
       await render();
     } else if (act === 'custom') {
       const [f] = await pickFiles();
       if (!f) return;
       toast('Подбираю цвета под фото…');
-      const blob = await compressImage(f, 1600);
+      const blob = await compressImage(f, 2000, 0.86);
       const pal = await paletteFromImage(blob);
       const blobId = await store.saveBlob(blob);
       if (s.customTheme && s.customTheme.blobId) await store.deleteBlob(s.customTheme.blobId);
-      await store.saveSettings({ customTheme: { ...pal, blobId }, themeId: 'custom' });
+      const cur = await store.getSettings();
+      if (cur.header && cur.header.blobId) await store.deleteBlob(cur.header.blobId);
+      await store.saveSettings({ customTheme: { ...pal, blobId }, header: null, baseThemeId: cur.themeId !== 'custom' ? cur.themeId : cur.baseThemeId, themeId: 'custom' });
       applyTheme(themeFromSettings(await store.getSettings()));
       await render();
       toast('Готово — тема из твоего фото');

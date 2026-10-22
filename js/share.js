@@ -14,6 +14,7 @@ function loadImage(src) {
   return new Promise((resolve) => {
     if (!src) return resolve(null);
     const i = new Image();
+    if (/^https?:/.test(src) && !src.startsWith(location.origin)) i.crossOrigin = 'anonymous';
     i.onload = () => resolve(i);
     i.onerror = () => resolve(null);
     i.src = src;

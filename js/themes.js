@@ -1,23 +1,28 @@
-// Темы: у каждой своё фото в шапке и палитра, вытащенная из этого фото.
+// Темы: у каждой своё фото в шапке и палитра под это фото.
+// Фото — Unsplash (бесплатная лицензия), грузятся в высоком разрешении и кэшируются.
+const U = (id) => `https://images.unsplash.com/${id}?w=1400&h=1400&fit=crop&q=78&fm=webp`;
+
+export const PHOTO_CREDITS = 'Фото тем — Unsplash';
+
 export const THEMES = {
   evening: {
-    id: 'evening', name: 'Тёплый вечер', mode: 'dark', photo: 'img/themes/evening.webp', pos: '60% 50%',
+    id: 'evening', name: 'Тёплый вечер', mode: 'dark', photo: U('photo-1554795833-34d9f2995c37'), pos: '50% 50%',
     bg: '#1A100C', surface: '#2B1D17', text: '#F2E8E3', muted: '#C9B8B1', accent: '#F19A55', onAccent: '#1A100C',
   },
   fog: {
-    id: 'fog', name: 'Туман', mode: 'dark', photo: 'img/themes/fog.webp', pos: '41% 50%',
+    id: 'fog', name: 'Туман', mode: 'dark', photo: U('photo-1606161175543-279a2a09b1ec'), pos: '50% 50%',
     bg: '#171213', surface: '#272022', text: '#F2E8E6', muted: '#C8B9B6', accent: '#D68671', onAccent: '#171213',
   },
   lavender: {
-    id: 'lavender', name: 'Лаванда', mode: 'dark', photo: 'img/themes/lavender.webp', pos: '45% 50%',
+    id: 'lavender', name: 'Лаванда', mode: 'dark', photo: U('photo-1712178435871-48d630f15969'), pos: '50% 50%',
     bg: '#140E1B', surface: '#231A2D', text: '#EDE7F3', muted: '#C1B7CD', accent: '#B98FE6', onAccent: '#140E1B',
   },
   pine: {
-    id: 'pine', name: 'Хвоя', mode: 'dark', photo: 'img/themes/pine.webp', pos: '40% 50%',
+    id: 'pine', name: 'Хвоя', mode: 'dark', photo: U('photo-1790222994064-0f9958a862d3'), pos: '50% 50%',
     bg: '#101614', surface: '#1D2523', text: '#E3F2EE', muted: '#B1C9C2', accent: '#86CBA1', onAccent: '#101614',
   },
   sea: {
-    id: 'sea', name: 'Море', mode: 'light', photo: 'img/themes/sea.webp', pos: '50% 50%',
+    id: 'sea', name: 'Море', mode: 'light', photo: U('photo-1553360458-87dfe1c58a22'), pos: '50% 50%',
     bg: '#F4EFE6', surface: '#FBFAF6', text: '#122B30', muted: '#405E64', accent: '#17788A', onAccent: '#FFFFFF',
   },
 };
@@ -27,7 +32,7 @@ export const fromHex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 1
 export const toHex = (rgb) => `#${rgb.map((v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 const rgbStr = (h) => fromHex(h).map((v) => Math.round(v * 255)).join(' ');
 
-function lum([r, g, b]) {
+export function lum([r, g, b]) {
   const f = (v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 }
@@ -68,7 +73,7 @@ function hlsToRgb(h, l, s) {
 }
 const hls = (h, l, s) => toHex(hlsToRgb(h, l, s));
 
-function mix(a, b, t) {
+export function mix(a, b, t) {
   const x = fromHex(a);
   const y = fromHex(b);
   return toHex(x.map((v, i) => v + (y[i] - v) * t));

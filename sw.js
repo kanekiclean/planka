@@ -1,5 +1,5 @@
 // Офлайн-кэш: приложение открывается и без интернета (ИИ, конечно, нет).
-const VERSION = 'planka-v4';
+const VERSION = 'planka-v5';
 const SHELL = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const SHELL = [
   'js/covers.js',
   'js/db.js',
   'js/docx.js',
+  'js/header.js',
   'js/share.js',
   'js/store.js',
   'js/themes.js',
@@ -23,11 +24,6 @@ const SHELL = [
   'js/views/settings.js',
   'js/views/today.js',
   'img/onboarding.webp',
-  'img/themes/evening.webp',
-  'img/themes/fog.webp',
-  'img/themes/lavender.webp',
-  'img/themes/pine.webp',
-  'img/themes/sea.webp',
   'icons/icon-192.png',
   'icons/apple-touch-icon.png',
 ];
@@ -40,7 +36,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![VERSION, 'planka-img', 'planka-fonts'].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -61,9 +57,21 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Фото тем с Unsplash — один раз скачали, дальше берём из кэша.
+  if (url.hostname === 'images.unsplash.com') {
+    e.respondWith(caches.open('planka-img').then(async (c) => {
+      const hit = await c.match(request);
+      if (hit) return hit;
+      const r = await fetch(request);
+      if (r.ok || r.type === 'opaque') c.put(request, r.clone());
+      return r;
+    }));
+    return;
+  }
+
   // Шрифты Google — кэш с фоновым обновлением.
   if (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com')) {
-    e.respondWith(caches.open(`${VERSION}-fonts`).then(async (c) => {
+    e.respondWith(caches.open('planka-fonts').then(async (c) => {
       const hit = await c.match(request);
       const net = fetch(request).then((r) => {
         if (r.ok || r.type === 'opaque') c.put(request, r.clone());

@@ -8,6 +8,8 @@ import { projectCover } from '../covers.js';
 import { openShare } from '../share.js';
 import { readDocx } from '../docx.js';
 import { sectionsToBlocks } from './projects.js';
+import { shadeHero } from '../header.js';
+import { themeFromSettings } from '../themes.js';
 
 export const tab = 'projects';
 
@@ -222,6 +224,7 @@ export default async function project(el, [id]) {
         ${timelineHtml()}
       </div>`;
     el.querySelectorAll('.eblock textarea').forEach(autosize);
+    if (cover) shadeHero(el.querySelector('.hero'), cover, themeFromSettings(await store.getSettings()), [0.45, 0.78]);
   }
 
   async function commit() {
