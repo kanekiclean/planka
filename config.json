@@ -1,7 +1,7 @@
 {
   "_comment": "Порядок предпочтения бесплатных моделей OpenRouter. Приложение берёт первую доступную. Меняется без обновления приложения.",
-  "preferred": ["deepseek", "qwen3", "qwen", "llama-3.3-70b", "llama-4", "glm", "kimi", "gemma-3", "mistral"],
-  "avoid": ["vision", "-vl", "embed", "guard", "tts", "audio", "image", "openrouter/free", "coder", "distill"],
+  "preferred": ["deepseek", "qwen3", "qwen", "glm", "kimi", "gemma-4-31b", "gemma-4", "minimax", "nemotron-3-ultra", "llama-3.3-70b", "llama-4", "nemotron-3-super", "mistral", "gemma"],
+  "avoid": ["vision", "-vl", "embed", "guard", "safety", "tts", "audio", "image", "lyria", "omni", "openrouter/free", "coder", "-code", "distill"],
   "minContext": 16000,
-  "fallbackModel": "meta-llama/llama-3.3-70b-instruct:free"
+  "fallbackModel": "google/gemma-4-31b-it:free"
 }
