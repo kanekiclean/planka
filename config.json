@@ -1,0 +1,7 @@
+{
+  "_comment": "Порядок предпочтения бесплатных моделей OpenRouter. Приложение берёт первую доступную. Меняется без обновления приложения.",
+  "preferred": ["deepseek", "qwen3", "qwen", "llama-3.3-70b", "llama-4", "glm", "kimi", "gemma-3", "mistral"],
+  "avoid": ["vision", "-vl", "embed", "guard", "tts", "audio", "image", "openrouter/free", "coder", "distill"],
+  "minContext": 16000,
+  "fallbackModel": "meta-llama/llama-3.3-70b-instruct:free"
+}
