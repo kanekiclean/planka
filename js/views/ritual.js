@@ -3,6 +3,7 @@ import {
 } from '../ui.js';
 import * as store from '../store.js';
 import * as ai from '../ai.js';
+import { PERSONAL } from '../ai.js';
 
 export const tab = null;
 
@@ -22,7 +23,8 @@ function headline(pct) {
 
 export default async function ritual(el, [dateParam]) {
   const s = await store.getSettings();
-  const areas = s.areas && s.areas.length ? s.areas : ['Работа', 'Учёба', 'Здоровье'];
+  const baseAreas = s.areas && s.areas.length ? s.areas : ['Работа', 'Учёба', 'Здоровье'];
+  const areas = baseAreas.includes(PERSONAL) ? baseAreas : [...baseAreas, PERSONAL];
   const todayStr = todayYmd();
   const yesterday = addDays(todayStr, -1);
   let date = dateParam;

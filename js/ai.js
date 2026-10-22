@@ -243,6 +243,8 @@ async function chat(messages, { temperature = 0, maxTokens = 6000 } = {}) {
   throw lastErr || new AIError('server');
 }
 
+export const PERSONAL = 'Личное';
+
 const int10 = (v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)));
 
 function profileBlock(s) {
@@ -256,18 +258,22 @@ function profileBlock(s) {
 
 export async function evaluateDay({ date, text, mood, projects, calib }) {
   const s = await getSettings();
-  const areas = s.areas && s.areas.length ? s.areas : ['Работа', 'Учёба', 'Здоровье'];
+  const userAreas = s.areas && s.areas.length ? s.areas : ['Работа', 'Учёба', 'Здоровье'];
+  // «Личное» есть всегда: отдых, быт, семья и отношения не должны попадать в «Учёбу».
+  const areas = userAreas.includes(PERSONAL) ? userAreas : [...userAreas, PERSONAL];
   const calibText = (calib || []).slice(-12).map((c) => `— «${c.title}» (сложность ${c.difficulty}, силы ${c.effort}, вклад ${c.impact}): человек считает, что оценка ${c.feedback === 'lower' ? 'завышена' : 'занижена'}`).join('\n');
   const projText = (projects || []).filter((p) => !p.done).map((p) => `[${p.id}] ${p.title}`).join('; ') || 'нет';
   const system = `Ты — оценщик в приложении «Планка», тихом вечернем дневнике. Человек перед сном описывает свой день, а ты разбиваешь описание на отдельные задачи и оцениваешь каждую ОТНОСИТЕЛЬНО ЭТОГО человека: его уровня, опыта и целей, а не среднего пользователя. То, что новичку даётся тяжело, опытному может быть разминкой, и наоборот.
 
 ${profileBlock(s)}
+Направления для задач: ${areas.join(', ')}
 Проекты: ${projText}
 ${calibText ? `Поправки человека к прошлым оценкам — подстрой под них свою шкалу:\n${calibText}\n` : ''}
 Для каждой задачи поставь целые оценки от 1 до 10:
 - difficulty — насколько это сложно именно для этого человека;
 - effort — сколько сил и времени ушло (учитывай указанное время);
 - impact — насколько это двигает его цели.
+Направление выбирай по смыслу задачи, только из списка «Направления для задач». Отдых, быт, покупки, семья, отношения, друзья, сериалы — это «${PERSONAL}», если для них нет более точного направления; не относи их к работе или учёбе.
 Не придумывай задач, которых нет в тексте. Мелкие однотипные дела объединяй. Отдых и быт можно записать с низким impact.
 
 Ответь строго одним JSON-объектом, без пояснений и без markdown:
@@ -277,7 +283,7 @@ ${calibText ? `Поправки человека к прошлым оценка�
   const ids = new Set((projects || []).map((p) => p.id));
   const tasks = (Array.isArray(out.tasks) ? out.tasks : []).filter((t) => t && t.title).slice(0, 20).map((t) => ({
     title: String(t.title).slice(0, 120),
-    area: areas.includes(t.area) ? t.area : areas[0],
+    area: areas.includes(t.area) ? t.area : PERSONAL,
     difficulty: int10(t.difficulty),
     effort: int10(t.effort),
     impact: int10(t.impact),
