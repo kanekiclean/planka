@@ -77,4 +77,8 @@ window.addEventListener('hashchange', route);
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+  // Просим браузер не вычищать данные при нехватке места.
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persisted().then((p) => p || navigator.storage.persist()).catch(() => {});
+  }
 })();
