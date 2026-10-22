@@ -70,7 +70,12 @@ export async function saveDay(day) {
   return day;
 }
 
-export const deleteDay = (date) => db.del('days', date);
+export async function deleteDay(date) {
+  const d = await getDay(date);
+  for (const id of (d && d.photos) || []) await db.del('blobs', id);
+  await db.del('days', date);
+  await db.del('kv', `dayPhotos:${date}`);
+}
 // Сохранить день как есть, без пересчёта нормы (например, чтобы дописать разбор ИИ).
 export const putDay = (day) => db.put('days', day);
 

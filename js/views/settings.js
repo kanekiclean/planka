@@ -73,7 +73,7 @@ export default async function settings(el) {
           <button class="btn btn--ghost btn--block" data-act="wipe">${icon('trash', 18)} Удалить все данные</button>
         </section>
 
-        <p class="tiny muted m0" style="text-align:center">Планка · версия 1.1 · ${PHOTO_CREDITS}</p>
+        <p class="tiny muted m0" style="text-align:center">Планка · версия 1.2 · ${PHOTO_CREDITS}</p>
       </div>`;
     el.querySelectorAll('textarea').forEach(autosize);
     if (s.apiKey && !s.modelOverride) {

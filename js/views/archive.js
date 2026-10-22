@@ -4,6 +4,7 @@ import {
 import * as store from '../store.js';
 import { monthScene } from '../covers.js';
 import { openDaySheet, openWeekSheet } from '../daysheet.js';
+import { monthCoverUrl } from '../photos.js';
 
 export const tab = 'archive';
 
@@ -78,7 +79,8 @@ export default async function archive(el) {
   const byMonth = {};
   for (const d of days) (byMonth[d.date.slice(0, 7)] ||= []).push(d);
   let lastYear = null;
-  const cards = months.map((key) => {
+  const covers = await Promise.all(months.map((key) => monthCoverUrl(byMonth[key] || [])));
+  const cards = months.map((key, ki) => {
     const list = byMonth[key] || [];
     const avg = avgOf(list.map((d) => d.pct));
     const yr = key.slice(0, 4);
@@ -86,7 +88,7 @@ export default async function archive(el) {
     lastYear = yr;
     const mi = Number(key.slice(5, 7)) - 1;
     return `${sep}<a class="month" href="#/month/${key}" aria-label="${MONTHS[mi]} ${yr}">
-      ${monthScene(mi)}
+      ${covers[ki] ? `<img class="month__img" src="${covers[ki]}" alt="">` : monthScene(mi)}
       <span class="month__badge">${list.length ? `${daysWord(list.length)} · ${avg}%` : key === now ? 'месяц только начался' : 'пусто'}</span>
       <span class="month__name">${MONTHS[mi]}</span>
     </a>`;
@@ -181,6 +183,6 @@ export default async function archive(el) {
       <div class="months">${cards}</div>
     </div>`;
 
-  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day));
+  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day, { onChange: () => window.dispatchEvent(new HashChangeEvent('hashchange')) }));
   on(el, 'click', '[data-act="week"]', () => openWeekSheet(addDays(today, -((parseYmd(today).getDay() + 6) % 7))));
 }

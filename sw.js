@@ -1,5 +1,5 @@
 // Офлайн-кэш: приложение открывается и без интернета (ИИ, конечно, нет).
-const VERSION = 'planka-v8';
+const VERSION = 'planka-v9';
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/db.js',
   'js/docx.js',
   'js/header.js',
+  'js/photos.js',
   'js/daysheet.js',
   'js/todos.js',
   'js/share.js',

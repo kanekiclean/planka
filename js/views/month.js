@@ -5,6 +5,10 @@ import * as store from '../store.js';
 import { monthScene } from '../covers.js';
 import { openShare } from '../share.js';
 import { openDaySheet } from '../daysheet.js';
+import { monthCoverUrl, photosBetween, openGallery, photoLabel } from '../photos.js';
+import { blobUrl } from '../ui.js';
+import { themeFromSettings } from '../themes.js';
+import { shadeHero } from '../header.js';
 
 export const tab = 'archive';
 
@@ -57,10 +61,13 @@ export default async function month(el, [key]) {
   }).join('');
 
   const list = [...days].reverse();
+  const cover = await monthCoverUrl(days);
+  const photos = await photosBetween(`${key}-01`, `${key}-${String(dim).padStart(2, '0')}`);
+  const purls = await Promise.all(photos.map((p) => blobUrl(p.id)));
 
   el.innerHTML = `
     <div class="hero" style="--hero-h:330px;--overlap:90px">
-      <div class="hero__svg">${monthScene(mi)}</div>
+      ${cover ? `<img class="hero__img" src="${cover}" alt="">` : `<div class="hero__svg">${monthScene(mi)}</div>`}
       <div class="hero__top">
         <a class="icon-btn" href="#/archive" aria-label="К архиву">${icon('back')}</a>
         ${closed ? `<button class="icon-btn" data-act="share" aria-label="Поделиться итогами месяца">${icon('share')}</button>` : '<span></span>'}
@@ -95,13 +102,21 @@ export default async function month(el, [key]) {
         <div class="hbars">${areaList.map(([a, v]) => `<div class="hbar"><span>${esc(a)}</span><div class="bar bar--theme"><i style="width:${Math.round((v / areaMax) * 100)}%"></i></div><b>${Math.round((v / areaSum) * 100)}%</b></div>`).join('')}</div>
       </section>` : ''}
 
+      ${photos.length ? `<section class="stack" style="--gap:12px" aria-label="Фото месяца">
+        <div class="row between"><h2 class="eyebrow">Фото месяца</h2><span class="tiny muted">${photos.length}</span></div>
+        <div class="mgal">${photos.map((p, i) => `<button data-ph="${i}" aria-label="Фото за ${fmtShort(p.date)}"><img src="${purls[i]}" alt="" loading="lazy"><span>${photoLabel(p)}</span></button>`).join('')}</div>
+      </section>` : ''}
+
       ${list.length ? `<section class="stack" style="--gap:6px" aria-label="Дни месяца">
         <h2 class="eyebrow">Дни</h2>
         <ul class="daylist">${list.map((d) => `<li><button data-day="${d.date}"><span class="d">${fmtShort(d.date)}</span><span class="grow small">${esc((d.tasks || []).slice(0, 2).map((t) => t.title).join(' · ') || 'без задач')}</span><span class="p">${d.pct}%</span></button></li>`).join('')}</ul>
       </section>` : `<div class="card p-lg small muted">${parseYmd(`${key}-01`) > new Date() ? 'Этот месяц ещё впереди.' : 'В этом месяце пока нет закрытых дней.'}</div>`}
     </div>`;
 
-  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day));
+  const rerender = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
+  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day, { onChange: rerender }));
+  on(el, 'click', '[data-ph]', (e, b) => openGallery(photos, Number(b.dataset.ph), { onOpenDay: (d) => openDaySheet(d, { onChange: rerender }) }));
+  if (cover) shadeHero(el.querySelector('.hero'), cover, themeFromSettings(await store.getSettings()), [0.5, 0.85]);
   on(el, 'click', '[data-act="share"]', () => openShare('month', {
     month: key,
     stats: {

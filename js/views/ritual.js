@@ -5,6 +5,7 @@ import * as store from '../store.js';
 import * as ai from '../ai.js';
 import { PERSONAL } from '../ai.js';
 import { todoList, toggleTodo } from '../todos.js';
+import { mountPhotoStrip, dayPhotos, clearDraft } from '../photos.js';
 
 export const tab = null;
 
@@ -78,6 +79,7 @@ export default async function ritual(el, [dateParam]) {
           <label class="sr-only" for="dayText">Что сделал за день</label>
           <textarea id="dayText" class="textarea textarea--big" data-f="text" placeholder="Например: два часа сидел над курсовой, доделал презентацию, вечером сходил в зал">${esc(st.text)}</textarea>
         </div>
+        ${photoBlock()}
         <div class="stack" style="--gap:10px">
           <span class="label" id="moodLbl">Настроение</span>
           <div class="mood" role="group" aria-labelledby="moodLbl">
@@ -92,6 +94,12 @@ export default async function ritual(el, [dateParam]) {
         ${st.tasks.length ? '<button class="btn btn--ghost btn--block" data-act="to-review">Вернуться к задачам</button>' : ''}
       </div>`;
   };
+
+  const photoBlock = () => `<section class="card p stack" style="--gap:10px" aria-label="Фото дня">
+      <div class="row between"><span class="label" style="color:var(--text)">Фото дня</span><span class="tiny muted">до 3 штук</span></div>
+      <div data-photos-host></div>
+      <span class="tiny muted">Первое фото — обложка: попадёт в коллаж недели и на обложку месяца. ИИ фото не видит — они только для тебя.</span>
+    </section>`;
 
   const loadingHtml = () => `
     <div class="loading pad" role="status">
@@ -144,6 +152,7 @@ export default async function ritual(el, [dateParam]) {
         <div class="row between"><h2 class="eyebrow">Задачи · ${st.tasks.length}</h2><span class="tiny muted">Поправь, если ИИ промахнулся</span></div>
         ${st.tasks.length ? `<ul class="tasks">${st.tasks.map(taskHtml).join('')}</ul>` : '<div class="card p small muted">Задач пока нет — добавь их вручную.</div>'}
         <button class="btn btn--ghost btn--block" data-act="add-task">${icon('plus', 18)} Добавить задачу</button>
+        ${photoBlock()}
         <div class="stack" style="--gap:10px;margin-top:6px">
           <button class="btn btn--accent btn--block" data-act="save">${st.saved ? 'Сохранить изменения' : 'Сохранить и закрыть день'}</button>
           <button class="btn btn--ghost btn--block" data-act="edit-text">${icon('edit', 18)} Изменить описание</button>
@@ -155,6 +164,8 @@ export default async function ritual(el, [dateParam]) {
   function render() {
     el.innerHTML = st.phase === 'input' ? inputHtml() : st.phase === 'loading' ? loadingHtml() : reviewHtml();
     autosize(el.querySelector('#dayText'));
+    const host = el.querySelector('[data-photos-host]');
+    if (host) mountPhotoStrip(host, st.date);
   }
 
   function startPhrases() {
@@ -297,8 +308,10 @@ export default async function ritual(el, [dateParam]) {
     const day = {
       date: st.date, raw: st.text, mood: st.mood, tasks: st.tasks, comment: st.comment, closed: true,
       closedAt: (existing && existing.closedAt) || Date.now(),
+      photos: await dayPhotos(st.date),
     };
     await store.saveDay(day);
+    await clearDraft(st.date);
     const calib = [];
     for (const t of st.tasks) {
       if (t.feedback === 'lower' || t.feedback === 'higher') {
@@ -389,7 +402,7 @@ export default async function ritual(el, [dateParam]) {
       render();
       window.scrollTo(0, 0);
     } else if (act === 'delete-day') {
-      const ok = await confirmSheet({ title: 'Удалить запись этого дня?', text: 'Задачи и оценка пропадут насовсем.', ok: 'Удалить', danger: true });
+      const ok = await confirmSheet({ title: 'Удалить запись этого дня?', text: 'Задачи, оценка и фото этого дня пропадут насовсем.', ok: 'Удалить', danger: true });
       if (!ok) return;
       await store.deleteDay(st.date);
       await syncProjects([]);
