@@ -54,7 +54,8 @@ export default async function project(el, [id]) {
   const s = await store.getSettings();
   let editing = false;
   const urls = {};
-  const saveSoon = debounce(() => store.saveProject(p), 500);
+  let deleted = false;
+  const saveSoon = debounce(() => { if (!deleted) store.saveProject(p); }, 500);
 
   async function preload() {
     for (const bid of store.projectBlobIds(p)) if (!urls[bid]) urls[bid] = await blobUrl(bid);
@@ -228,6 +229,7 @@ export default async function project(el, [id]) {
   }
 
   async function commit() {
+    if (deleted) return;
     saveSoon.flush();
     await store.saveProject(p);
     await render();
@@ -379,6 +381,8 @@ export default async function project(el, [id]) {
       } else if (m === 'delete') {
         const ok = await confirmSheet({ title: 'Удалить проект?', text: 'Страница, фото и заметки пропадут насовсем.', ok: 'Удалить', danger: true });
         if (!ok) return;
+        deleted = true;
+        saveSoon.cancel();
         await store.deleteProject(p);
         toast('Проект удалён');
         location.hash = '#/projects';
@@ -566,6 +570,6 @@ export default async function project(el, [id]) {
     }
   });
 
-  window.addEventListener('hashchange', () => saveSoon.flush(), { once: true });
+  window.addEventListener('hashchange', () => { if (!deleted) saveSoon.flush(); }, { once: true });
   await render();
 }

@@ -180,14 +180,26 @@ export function on(root, type, selector, fn) {
 }
 
 export function debounce(fn, ms = 400) {
-  let t;
+  let t = null;
+  let lastArgs = [];
   const d = (...args) => {
+    lastArgs = args;
     clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
+    t = setTimeout(() => {
+      t = null;
+      fn(...lastArgs);
+    }, ms);
   };
-  d.flush = (...args) => {
+  // Сохранить отложенное прямо сейчас — только если что-то действительно ждёт.
+  d.flush = () => {
+    if (!t) return;
     clearTimeout(t);
-    fn(...args);
+    t = null;
+    fn(...lastArgs);
+  };
+  d.cancel = () => {
+    clearTimeout(t);
+    t = null;
   };
   return d;
 }
