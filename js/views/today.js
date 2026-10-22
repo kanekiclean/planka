@@ -6,6 +6,10 @@ import { themeFromSettings } from '../themes.js';
 import { projectCover } from '../covers.js';
 import { openShare } from '../share.js';
 import { heroPhoto, shadeHero, openHeaderSheet } from '../header.js';
+import { openDaySheet, openWeekSheet } from '../daysheet.js';
+import {
+  todoList, todoRow, toggleTodo, openTodoSheet, addTodo, progressText,
+} from '../todos.js';
 
 export const tab = 'today';
 
@@ -81,14 +85,29 @@ export default async function today(el) {
   const weekHtml = week.map((w) => {
     const h = w.pct == null ? 0 : Math.round((Math.min(w.pct, maxPct) / maxPct) * 96);
     const cls = w.future ? 'week__bar--future' : w.pct == null ? 'week__bar--empty' : w.pct >= 100 ? 'week__bar--hit' : '';
-    return `<div class="week__col">
+    return `<button class="week__col" data-day="${w.ds}" aria-label="${fmtLong(w.ds)}${w.pct == null ? '' : `: ${w.pct}%`}">
       <span class="week__val">${w.pct == null ? '' : `${w.pct}%`}</span>
-      <div class="week__track"><div class="week__bar ${cls}" style="height:${Math.max(h, 6)}px"></div></div>
+      <span class="week__track"><span class="week__bar ${cls}" style="height:${Math.max(h, 6)}px"></span></span>
       <span class="week__day${w.isToday ? ' week__day--today' : ''}">${WD_SHORT[week.indexOf(w)]}</span>
-    </div>`;
+    </button>`;
   }).join('');
   const closedThisWeek = week.filter((w) => w.pct != null);
   const weekAvg = closedThisWeek.length ? Math.round(closedThisWeek.reduce((a, w) => a + w.pct, 0) / closedThisWeek.length) : null;
+
+  const todayTodos = await store.todosFor(todayStr);
+  const allProjects = await store.allProjects();
+  const planHtml = `
+      <section class="pad stack" style="--gap:12px" aria-label="План на сегодня">
+        <div class="row between"><h2 class="eyebrow">План на сегодня</h2><span class="row" style="--gap:12px"><span class="small muted" data-plan-count>${progressText(todayTodos)}</span><a class="link small" href="#/plan">Весь план</a></span></div>
+        <div class="card p">
+          ${todayTodos.length ? todoList(todayTodos, allProjects) : '<p class="small muted m0" style="padding:4px 2px 2px">Пока пусто. Добавь пару дел — вечером ИИ учтёт, что выполнено.</p>'}
+          <form class="todo-add" data-add>
+            <label class="sr-only" for="today-todo">Новое дело на сегодня</label>
+            <input class="input" id="today-todo" maxlength="140" autocomplete="off" placeholder="Добавить дело на сегодня">
+            <button class="add-btn" type="submit" aria-label="Добавить дело">${icon('plus', 22, 2.2)}</button>
+          </form>
+        </div>
+      </section>`;
 
   const projHtml = projects.length
     ? `<div class="hscroll">${(await Promise.all(projects.map((p) => projectCardHtml(p, true)))).join('')}<a class="pcard pcard--mini pcard--new" href="#/projects/new">${icon('plus', 22)}<span>Новый проект</span></a></div>`
@@ -109,14 +128,15 @@ export default async function today(el) {
     </div>
     <div class="pad over">${card}</div>
     <div class="sections">
+      ${planHtml}
       <section class="pad stack" style="--gap:12px" aria-label="Эта неделя">
         <div class="row between">
           <h2 class="eyebrow">Эта неделя</h2>
-          ${weekAvg != null ? `<span class="small muted">в среднем ${weekAvg}%</span>` : ''}
+          ${weekAvg != null ? `<button class="link small" data-act="week" style="background:none;border:0;padding:0">${icon('spark', 14)} Разбор · ${weekAvg}%</button>` : ''}
         </div>
         <div class="card p">
           <div class="week"><span class="week__norm" aria-hidden="true"></span>${weekHtml}</div>
-          <p class="tiny muted m0" style="margin-top:12px">Пунктир — твоя норма, ${pts(norm)} в день. ${closedThisWeek.length ? `Закрыто ${closedThisWeek.length} ${plural(closedThisWeek.length, 'день', 'дня', 'дней')} из 7.` : ''}</p>
+          <p class="tiny muted m0" style="margin-top:12px">Нажми на день — откроется его разбор. Пунктир — твоя норма, ${pts(norm)} в день. ${closedThisWeek.length ? `Закрыто ${closedThisWeek.length} ${plural(closedThisWeek.length, 'день', 'дня', 'дней')} из 7.` : ''}</p>
         </div>
       </section>
       <section class="stack" style="--gap:12px" aria-label="Проекты">
@@ -126,6 +146,38 @@ export default async function today(el) {
     </div>`;
 
   on(el, 'click', '[data-act="share"]', () => openShare('day', { day, photo }));
+  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day));
+  on(el, 'click', '[data-act="week"]', () => openWeekSheet(monday));
+  const rerender = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
+  on(el, 'click', '[data-act="todo-toggle"]', async (e, b) => {
+    await toggleTodo(b.closest('[data-tid]'));
+    const list = await store.todosFor(todayStr);
+    const c = el.querySelector('[data-plan-count]');
+    if (c) c.textContent = progressText(list);
+  });
+  on(el, 'click', '[data-act="todo-edit"]', async (e, b) => {
+    const t = (await store.allTodos()).find((x) => x.id === b.closest('[data-tid]').dataset.tid);
+    if (t) openTodoSheet(t, { projects: allProjects, onChange: rerender });
+  });
+  el.addEventListener('submit', async (e) => {
+    if (!e.target.matches('[data-add]')) return;
+    e.preventDefault();
+    const input = el.querySelector('#today-todo');
+    if (!input.value.trim()) return;
+    const t = await addTodo(input.value, todayStr);
+    input.value = '';
+    const card = e.target.closest('.card');
+    let list = card.querySelector('[data-todos]');
+    if (!list) {
+      card.querySelector('p.muted')?.remove();
+      card.insertAdjacentHTML('afterbegin', todoList([], allProjects));
+      list = card.querySelector('[data-todos]');
+    }
+    list.insertAdjacentHTML('beforeend', todoRow(t, allProjects));
+    const c = el.querySelector('[data-plan-count]');
+    if (c) c.textContent = progressText(await store.todosFor(todayStr));
+    input.focus();
+  });
   on(el, 'click', '[data-act="header"]', () => openHeaderSheet(() => window.dispatchEvent(new HashChangeEvent('hashchange'))));
   shadeHero(el.querySelector('.hero'), photo, theme, [0.15, 0.55]);
 }

@@ -9,9 +9,11 @@ import * as archive from './views/archive.js';
 import * as month from './views/month.js';
 import * as settings from './views/settings.js';
 import * as onboarding from './views/onboarding.js';
+import * as plan from './views/plan.js';
 
 const routes = [
   [/^#\/today$/, today],
+  [/^#\/plan(?:\/(\d{4}-\d{2}-\d{2}))?$/, plan],
   [/^#\/ritual(?:\/(\d{4}-\d{2}-\d{2}))?$/, ritual],
   [/^#\/projects(?:\/(new))?$/, projects],
   [/^#\/project\/([\w-]+)$/, project],
@@ -36,8 +38,9 @@ function tabbar(active) {
   tb.hidden = false;
   const tab = (id, href, ic, label) => `<a class="tab" href="${href}" aria-label="${label}"${active === id ? ' aria-current="page"' : ''}>${icon(ic)}<span class="lbl">${label}</span></a>`;
   tb.innerHTML = tab('today', '#/today', 'home', 'Сегодня')
-    + tab('projects', '#/projects', 'layers', 'Проекты')
+    + tab('plan', '#/plan', 'list', 'План')
     + `<a class="tab tab--plus" href="#/ritual" aria-label="Закрыть день">${icon('plus', 22, 2.2)}</a>`
+    + tab('projects', '#/projects', 'layers', 'Проекты')
     + tab('archive', '#/archive', 'calendar', 'Архив');
 }
 

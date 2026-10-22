@@ -4,6 +4,7 @@ import {
 import * as store from '../store.js';
 import * as ai from '../ai.js';
 import { PERSONAL } from '../ai.js';
+import { todoList, toggleTodo } from '../todos.js';
 
 export const tab = null;
 
@@ -34,6 +35,7 @@ export default async function ritual(el, [dateParam]) {
     date = new Date().getHours() < 5 && !(y && y.closed) && !(t && t.closed) ? yesterday : todayStr;
   }
   const projects = await store.allProjects();
+  let plan = await store.todosFor(date);
   const existing = await store.getDay(date);
   const st = {
     date,
@@ -67,6 +69,11 @@ export default async function ritual(el, [dateParam]) {
           <p class="small muted m0">Пиши как другу: что сделал и примерно сколько времени ушло. Можно списком, можно одним абзацем.</p>
         </div>
         ${switcher}
+        ${plan.length ? `<section class="card p stack" style="--gap:6px" aria-label="Дела из плана">
+          <div class="row between"><span class="label">Из плана на этот день</span><span class="tiny muted" data-plan-count>${plan.filter((t) => t.done).length} из ${plan.length}</span></div>
+          ${todoList(plan, projects)}
+          <span class="tiny muted">Отмеченное ИИ учтёт сам — дописывать не нужно.</span>
+        </section>` : ''}
         <div class="field">
           <label class="sr-only" for="dayText">Что сделал за день</label>
           <textarea id="dayText" class="textarea textarea--big" data-f="text" placeholder="Например: два часа сидел над курсовой, доделал презентацию, вечером сходил в зал">${esc(st.text)}</textarea>
@@ -164,15 +171,23 @@ export default async function ritual(el, [dateParam]) {
   }
 
   async function evaluate() {
-    if (!st.text.trim()) {
+    plan = await store.todosFor(st.date);
+    const planDone = plan.filter((t) => t.done).map((t) => t.text);
+    const planLeft = plan.filter((t) => !t.done).map((t) => t.text);
+    if (!st.text.trim() && !planDone.length) {
       toast('Напиши пару строк о дне');
       return;
     }
+    const fullText = [
+      st.text.trim(),
+      planDone.length ? `Выполнено из плана на день: ${planDone.join('; ')}.` : '',
+      planLeft.length ? `Не успел из плана: ${planLeft.join('; ')}.` : '',
+    ].filter(Boolean).join('\n\n');
     st.phase = 'loading';
     render();
     startPhrases();
     try {
-      const res = await ai.evaluateDay({ date: st.date, text: st.text, mood: st.mood, projects, calib: await store.getCalib() });
+      const res = await ai.evaluateDay({ date: st.date, text: fullText, mood: st.mood, projects, calib: await store.getCalib() });
       st.tasks = res.tasks.map((t) => ({
         id: uid(), ...t, feedback: 'ok', ai: { d: t.difficulty, e: t.effort, i: t.impact },
       }));
@@ -190,11 +205,13 @@ export default async function ritual(el, [dateParam]) {
     }
   }
 
-  function manual() {
-    const parts = st.text
+  async function manual() {
+    plan = await store.todosFor(st.date);
+    const fromPlan = plan.filter((t) => t.done).map((t) => t.text);
+    const parts = [...fromPlan, ...st.text
       .split(/\n|;|•|,\s+|\.\s+/)
       .map((x) => x.replace(/^[\s\-–—*\d.)]+/, '').trim())
-      .filter((x) => x.length > 1)
+      .filter((x) => x.length > 1)]
       .slice(0, 15);
     st.tasks = parts.map((title) => ({
       id: uid(), title: title.slice(0, 120), area: areas[0], difficulty: 5, effort: 5, impact: 5, projectId: null, reason: '', feedback: 'ok',
@@ -331,7 +348,18 @@ export default async function ritual(el, [dateParam]) {
   on(el, 'click', '[data-act]', async (e, b) => {
     const act = b.dataset.act;
     if (act === 'exit') exit();
-    else if (act === 'mood') {
+    else if (act === 'todo-toggle') {
+      await toggleTodo(b.closest('[data-tid]'));
+      plan = await store.todosFor(st.date);
+      const c = el.querySelector('[data-plan-count]');
+      if (c) c.textContent = `${plan.filter((t) => t.done).length} из ${plan.length}`;
+    } else if (act === 'todo-edit') {
+      toggleTodo(b.closest('[data-tid]')).then(async () => {
+        plan = await store.todosFor(st.date);
+        const c = el.querySelector('[data-plan-count]');
+        if (c) c.textContent = `${plan.filter((t) => t.done).length} из ${plan.length}`;
+      });
+    } else if (act === 'mood') {
       st.mood = Number(b.dataset.v);
       el.querySelectorAll('.mood__dot').forEach((d) => d.setAttribute('aria-pressed', String(Number(d.dataset.v) === st.mood)));
     } else if (act === 'date') {

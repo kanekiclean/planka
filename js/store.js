@@ -71,6 +71,29 @@ export async function saveDay(day) {
 }
 
 export const deleteDay = (date) => db.del('days', date);
+// Сохранить день как есть, без пересчёта нормы (например, чтобы дописать разбор ИИ).
+export const putDay = (day) => db.put('days', day);
+
+// ——— Ежедневник: мелкие дела на конкретные дни ———
+const byTodo = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+  || (a.done - b.done)
+  || (a.time || '99').localeCompare(b.time || '99')
+  || (a.createdAt - b.createdAt);
+
+export async function allTodos() {
+  return (await db.all('todos')).sort(byTodo);
+}
+export async function todosFor(date) {
+  return (await allTodos()).filter((t) => t.date === date);
+}
+export async function overdueTodos(today) {
+  return (await allTodos()).filter((t) => !t.done && t.date < today);
+}
+export function newTodo({ text, date, time = '', projectId = null }) {
+  return { id: uid(), text, date, time, projectId, done: false, doneAt: null, createdAt: Date.now() };
+}
+export const saveTodo = (t) => db.put('todos', t);
+export const deleteTodo = (id) => db.del('todos', id);
 
 export function streak(days, today) {
   const closed = new Set(days.filter((d) => d.closed).map((d) => d.date));
@@ -184,7 +207,7 @@ export async function exportAll() {
   return {
     app: 'planka', version: 1, exportedAt: new Date().toISOString(),
     settings: s, calib: await getCalib(),
-    days: await db.all('days'), projects: await db.all('projects'), blobs,
+    days: await db.all('days'), projects: await db.all('projects'), todos: await db.all('todos'), blobs,
   };
 }
 
@@ -197,6 +220,7 @@ export async function importAll(data) {
   await db.kvSet('calib', data.calib || []);
   for (const d of data.days || []) await db.put('days', d);
   for (const p of data.projects || []) await db.put('projects', p);
+  for (const t of data.todos || []) await db.put('todos', t);
   for (const b of data.blobs || []) await db.put('blobs', { id: b.id, type: b.type, blob: base64ToBlob(b.data, b.type), at: Date.now() });
   settingsCache = null;
 }

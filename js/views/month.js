@@ -4,6 +4,7 @@ import {
 import * as store from '../store.js';
 import { monthScene } from '../covers.js';
 import { openShare } from '../share.js';
+import { openDaySheet } from '../daysheet.js';
 
 export const tab = 'archive';
 
@@ -52,7 +53,7 @@ export default async function month(el, [key]) {
     const d = Number(c.ds.slice(8));
     const cls = `pill pill--${c.state}${c.isToday ? ' pill--today' : ''}`;
     const title = `${d} ${MONTHS_GEN[mi]}: ${c.day ? `${c.day.pct}%` : label[c.state]}`;
-    return c.day ? `<a class="${cls}" href="#/ritual/${c.ds}" aria-label="${title}" title="${title}"></a>` : `<span class="${cls}" title="${title}"></span>`;
+    return `<button class="${cls}" data-day="${c.ds}" aria-label="${title}" title="${title}"></button>`;
   }).join('');
 
   const list = [...days].reverse();
@@ -96,10 +97,11 @@ export default async function month(el, [key]) {
 
       ${list.length ? `<section class="stack" style="--gap:6px" aria-label="Дни месяца">
         <h2 class="eyebrow">Дни</h2>
-        <ul class="daylist">${list.map((d) => `<li><a href="#/ritual/${d.date}"><span class="d">${fmtShort(d.date)}</span><span class="grow small">${esc((d.tasks || []).slice(0, 2).map((t) => t.title).join(' · ') || 'без задач')}</span><span class="p">${d.pct}%</span></a></li>`).join('')}</ul>
+        <ul class="daylist">${list.map((d) => `<li><button data-day="${d.date}"><span class="d">${fmtShort(d.date)}</span><span class="grow small">${esc((d.tasks || []).slice(0, 2).map((t) => t.title).join(' · ') || 'без задач')}</span><span class="p">${d.pct}%</span></button></li>`).join('')}</ul>
       </section>` : `<div class="card p-lg small muted">${parseYmd(`${key}-01`) > new Date() ? 'Этот месяц ещё впереди.' : 'В этом месяце пока нет закрытых дней.'}</div>`}
     </div>`;
 
+  on(el, 'click', '[data-day]', (e, b) => openDaySheet(b.dataset.day));
   on(el, 'click', '[data-act="share"]', () => openShare('month', {
     month: key,
     stats: {

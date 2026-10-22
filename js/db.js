@@ -1,11 +1,12 @@
 // Тонкая обёртка над IndexedDB: всё хранится только на устройстве.
 const DB_NAME = 'planka';
-const VERSION = 1;
+const VERSION = 2;
 const STORES = {
   kv: null,
   days: 'date',
   projects: 'id',
   blobs: 'id',
+  todos: 'id',
 };
 
 let dbPromise = null;

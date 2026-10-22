@@ -275,6 +275,7 @@ ${calibText ? `Поправки человека к прошлым оценка�
 - impact — насколько это двигает его цели.
 Направление выбирай по смыслу задачи, только из списка «Направления для задач». Отдых, быт, покупки, семья, отношения, друзья, сериалы — это «${PERSONAL}», если для них нет более точного направления; не относи их к работе или учёбе.
 Не придумывай задач, которых нет в тексте. Мелкие однотипные дела объединяй. Отдых и быт можно записать с низким impact.
+Пункты «Выполнено из плана» — тоже задачи (не дублируй, если они уже описаны в тексте). «Не успел из плана» — не задачи, но можешь мягко упомянуть их в комментарии.
 
 Ответь строго одним JSON-объектом, без пояснений и без markdown:
 {"tasks":[{"title":"коротко, 2–6 слов, в прошедшем времени","area":"одно из направлений","difficulty":5,"effort":5,"impact":5,"project_id":"id проекта или null","reason":"одна короткая фраза, почему такая оценка"}],"comment":"1–2 тёплых предложения на «ты» об итогах дня: заметь главное, без лести и без морали; если день слабый — мягко, без упрёков"}`;
@@ -350,4 +351,41 @@ export async function importDoc({ text, title }) {
     { role: 'user', content: `Название проекта: ${title}\n\nДокумент:\n${text.slice(0, 15000)}` },
   ], { maxTokens: 8000 });
   return Array.isArray(out.blocks) ? out.blocks.slice(0, 24) : [];
+}
+
+const strList = (v) => (Array.isArray(v) ? v : []).map((x) => String(x).slice(0, 160)).filter(Boolean).slice(0, 3);
+
+// Разбор закрытого дня: что получилось, что можно лучше, совет на завтра.
+export async function analyzeDay({ day, recent = [], plan = [] }) {
+  const s = await getSettings();
+  const system = `Ты — внимательный и тёплый наставник в приложении «Планка». Разбери закрытый день человека относительно его уровня и целей, а не «среднего пользователя».
+${profileBlock(s)}
+Ответь строго JSON без пояснений: {"good":["что получилось"],"improve":["что можно сделать лучше — мягко и конкретно"],"tomorrow":"один конкретный совет на завтра"}.
+В каждом списке не больше трёх пунктов по 4–12 слов. Пиши на «ты», без морализаторства и общих фраз, опирайся на факты дня.`;
+  const lines = [
+    `Дата: ${fmtLong(day.date)}`,
+    `Итог: ${day.pct}% от личной нормы (${day.total} очков при норме ${day.norm})`,
+    day.mood ? `Настроение: ${day.mood} из 5` : '',
+    'Задачи:',
+    ...(day.tasks || []).map((t) => `— ${t.title} [${t.area}]: сложность ${t.difficulty}, силы ${t.effort}, вклад ${t.impact}`),
+    plan.length ? `План на день: ${plan.map((t) => `${t.done ? '✓' : '✗'} ${t.text}`).join('; ')}` : '',
+    day.raw ? `Как человек описал день: ${day.raw.slice(0, 1500)}` : '',
+    recent.length ? `Предыдущие дни (% от нормы): ${recent.map((d) => `${d.date.slice(5)} — ${d.pct}%`).join(', ')}` : '',
+  ].filter(Boolean).join('\n');
+  const out = await chat([{ role: 'system', content: system }, { role: 'user', content: lines }], { temperature: 0.3 });
+  return { good: strList(out.good), improve: strList(out.improve), tomorrow: out.tomorrow ? String(out.tomorrow).slice(0, 220) : '', at: Date.now() };
+}
+
+// Разбор недели: общий итог, лучшее, закономерность, совет.
+export async function analyzeWeek({ days, planDone = 0, planTotal = 0 }) {
+  const s = await getSettings();
+  const system = `Ты — внимательный наставник в приложении «Планка». Посмотри на неделю человека и найди главное.
+${profileBlock(s)}
+Ответь строго JSON без пояснений: {"summary":"2 коротких предложения об итогах недели","best":"что получилось лучше всего","pattern":"одна замеченная закономерность — по дням, настроению или направлениям","advice":"один конкретный совет на следующую неделю"}.
+Пиши на «ты», тепло и по делу, без общих фраз.`;
+  const lines = days.map((d) => `${fmtLong(d.date)}: ${d.pct}% (настроение ${d.mood || '—'}) — ${(d.tasks || []).map((t) => `${t.title} [${t.area}]`).join('; ')}`);
+  if (planTotal) lines.push(`Ежедневник: выполнено ${planDone} из ${planTotal} запланированных дел.`);
+  const out = await chat([{ role: 'system', content: system }, { role: 'user', content: lines.join('\n') }], { temperature: 0.3 });
+  const str = (v) => (v ? String(v).slice(0, 300) : '');
+  return { summary: str(out.summary), best: str(out.best), pattern: str(out.pattern), advice: str(out.advice), at: Date.now() };
 }
