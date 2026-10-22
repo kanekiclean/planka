@@ -19,15 +19,38 @@ export function aiErrorText(e) {
   const map = {
     no_key: 'Добавь ключ OpenRouter в настройках — без него ИИ не работает.',
     bad_key: 'Ключ не подошёл. Проверь его в настройках.',
-    rate_limit: 'Лимит бесплатных запросов исчерпан. Попробуй позже или оцени день без ИИ.',
+    rate_limit: 'Дневной лимит бесплатных запросов исчерпан. Он обнулится завтра, а сегодня можно оценить день без ИИ.',
+    busy: 'Бесплатные модели сейчас перегружены. Попробуй через пару минут или оцени день без ИИ.',
     no_credits: 'Для этой модели нужен баланс на OpenRouter. Оставь выбор модели автоматическим.',
     no_model: 'Сейчас не нашлось бесплатной модели. Попробуй позже.',
     network: 'Нет связи с ИИ. Проверь интернет.',
     bad_json: 'ИИ ответил что-то странное. Попробуй ещё раз.',
     server: 'ИИ временно недоступен. Попробуй через минуту.',
   };
-  return map[e && e.code] || 'Что-то пошло не так. Попробуй ещё раз.';
+  const text = map[e && e.code] || 'Что-то пошло не так. Попробуй ещё раз.';
+  return e && e.detail ? `${text} (${String(e.detail).slice(0, 140)})` : text;
 }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Разбираем ошибку OpenRouter: дневной лимит аккаунта или перегрузка конкретной модели.
+async function errorInfo(r) {
+  let msg = '';
+  try {
+    const txt = await r.text();
+    try {
+      const j = JSON.parse(txt);
+      const err = j.error || {};
+      msg = [err.message, err.metadata && err.metadata.raw].filter(Boolean).join(' ');
+    } catch {
+      msg = txt;
+    }
+  } catch {
+    /* тело недоступно */
+  }
+  return msg.replace(/\s+/g, ' ').trim();
+}
+const isDailyLimit = (msg) => /per-day|per day|daily|в день/i.test(msg || '');
 
 let configPromise = null;
 function getConfig() {
@@ -120,12 +143,31 @@ function parseJSON(text) {
   }
 }
 
+const MAX_ATTEMPTS = 4;
+
 async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
   const s = await getSettings();
   if (!s.apiKey) throw new AIError('no_key');
   const tried = [];
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const model = await pickModel({ exclude: tried });
+  let lastErr = null;
+  const skip = async (model, err, wait = 0) => {
+    lastErr = err;
+    if (s.modelOverride) throw err;
+    tried.push(model);
+    await db.kvSet('modelPick', null);
+    if (wait) await sleep(wait);
+  };
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    let model;
+    if (s.modelOverride) model = s.modelOverride;
+    else if (attempt === MAX_ATTEMPTS - 1) model = 'openrouter/free'; // последний шанс: любая свободная модель
+    else {
+      try {
+        model = await pickModel({ exclude: tried });
+      } catch {
+        model = 'openrouter/free';
+      }
+    }
     let r;
     try {
       r = await fetch(`${BASE}/chat/completions`, {
@@ -141,41 +183,41 @@ async function chat(messages, { temperature = 0, maxTokens = 2500 } = {}) {
     } catch {
       throw new AIError('network');
     }
-    if (r.status === 401 || r.status === 403) throw new AIError('bad_key');
+    if (r.status === 401) throw new AIError('bad_key');
+    if (r.status === 429) {
+      const msg = await errorInfo(r);
+      if (isDailyLimit(msg)) throw new AIError('rate_limit');
+      await skip(model, new AIError('busy', msg), 700);
+      continue;
+    }
     if (r.status === 402) {
-      if (s.modelOverride) throw new AIError('no_credits');
-      tried.push(model);
-      await db.kvSet('modelPick', null);
+      await skip(model, new AIError('no_credits', await errorInfo(r)));
       continue;
     }
-    if (r.status === 429) throw new AIError('rate_limit');
-    if (r.status === 404 || r.status === 400 || r.status >= 500) {
-      if (s.modelOverride || attempt === 2) throw new AIError(r.status >= 500 ? 'server' : 'no_model');
-      tried.push(model);
-      await db.kvSet('modelPick', null);
+    if (!r.ok) {
+      await skip(model, new AIError(r.status >= 500 ? 'server' : 'no_model', await errorInfo(r)));
       continue;
     }
-    if (!r.ok) throw new AIError('server');
     const j = await r.json();
     if (j.error) {
-      if (j.error.code === 429) throw new AIError('rate_limit');
-      tried.push(model);
-      await db.kvSet('modelPick', null);
+      const msg = [j.error.message, j.error.metadata && j.error.metadata.raw].filter(Boolean).join(' ');
+      if (j.error.code === 429 && isDailyLimit(msg)) throw new AIError('rate_limit');
+      await skip(model, new AIError(j.error.code === 429 ? 'busy' : 'server', msg), 500);
       continue;
     }
     const content = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     if (!content) {
-      tried.push(model);
+      await skip(model, new AIError('server', 'пустой ответ модели'));
       continue;
     }
     try {
       return parseJSON(content);
     } catch (e) {
-      if (attempt === 2) throw e;
+      lastErr = e;
       messages = [...messages, { role: 'assistant', content }, { role: 'user', content: 'Верни только JSON-объект, без текста вокруг.' }];
     }
   }
-  throw new AIError('server');
+  throw lastErr || new AIError('server');
 }
 
 const int10 = (v) => Math.min(10, Math.max(1, Math.round(Number(v) || 5)));

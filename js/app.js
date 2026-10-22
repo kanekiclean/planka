@@ -75,7 +75,15 @@ window.addEventListener('hashchange', route);
   await refreshTheme();
   await route();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Пришла новая версия — тихо перезагружаемся, чтобы она сразу заработала.
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js').then((reg) => reg.update()).catch(() => {});
   }
   // Просим браузер не вычищать данные при нехватке места.
   if (navigator.storage && navigator.storage.persist) {
